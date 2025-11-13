@@ -105,7 +105,7 @@ class ESMixin(Generic[T]):
     # sort_field needs to be unique for the pagination to work, so we can use the FQN
     paginate_query = (
         "/search/query?q=&size={size}&deleted=false{filter}&index={index}{include_fields}"
-        "&sort_field=fullyQualifiedName{after}"
+        "&sort_field={sort_field}&sort_order={sort_order}{after}"
     )
 
     @functools.lru_cache(maxsize=512)
@@ -333,16 +333,22 @@ class ESMixin(Generic[T]):
         query_filter: Optional[str] = None,
         size: int = 100,
         include_fields: Optional[List[str]] = None,
+        sort_field: str = "fullyQualifiedName",
+        sort_order: str = "desc",
     ) -> Iterator[ESResponse]:
         """Paginate through the ES results, ignoring individual errors"""
         after: Optional[str] = None
         error_pages = 0
+        sort_field = sort_field
+        sort_order = sort_order
         query = functools.partial(
             self.paginate_query.format,
             index=ES_INDEX_MAP[entity.__name__],
             filter="&query_filter=" + quote_plus(query_filter) if query_filter else "",
             size=size,
             include_fields=self._get_include_fields_query(include_fields),
+            sort_field=sort_field,
+            sort_order=sort_order,
         )
         while True:
             query_string = query(
@@ -373,8 +379,12 @@ class ESMixin(Generic[T]):
         query_filter: Optional[str] = None,
         size: int = 100,
         fields: Optional[List[str]] = None,
+        sort_field: str = "fullyQualifiedName",
+        sort_order: str = "desc",
     ) -> Iterator[T]:
-        for response in self._paginate_es_internal(entity, query_filter, size):
+        for response in self._paginate_es_internal(
+            entity, query_filter, size, sort_order=sort_order, sort_field=sort_field
+        ):
             yield from self._yield_hits_from_api(
                 response=response, entity=entity, fields=fields
             )
